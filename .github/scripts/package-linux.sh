@@ -10,12 +10,12 @@ DEB_ROOT="$DIST/deb-root"
 cargo build --release --locked -p rusty-ntr-viewer
 
 mkdir -p "$STAGE"
-cp target/release/rusty-ntr-viewer README.md LICENSE THIRD_PARTY_NOTICES.md "$STAGE/"
+cp target/release/rusty-ntr-viewer README.md LICENSE THIRD_PARTY_NOTICES.md THIRD_PARTY_LICENSES.html "$STAGE/"
 tar -C "$DIST" -czf "$DIST/$PACKAGE_NAME.tar.gz" "$PACKAGE_NAME"
 
 mkdir -p "$DEB_ROOT/DEBIAN" "$DEB_ROOT/usr/bin" "$DEB_ROOT/usr/share/applications" "$DEB_ROOT/usr/share/doc/rusty-ntr-viewer"
 install -m 755 target/release/rusty-ntr-viewer "$DEB_ROOT/usr/bin/rusty-ntr-viewer"
-cp README.md LICENSE THIRD_PARTY_NOTICES.md "$DEB_ROOT/usr/share/doc/rusty-ntr-viewer/"
+cp README.md LICENSE THIRD_PARTY_NOTICES.md THIRD_PARTY_LICENSES.html "$DEB_ROOT/usr/share/doc/rusty-ntr-viewer/"
 
 cat > "$DEB_ROOT/DEBIAN/control" <<EOF
 Package: rusty-ntr-viewer

@@ -8,6 +8,7 @@ edition = "2024"
 license = "MIT"
 repository = "https://github.com/minagirgis2001/RustyNTRViewer"
 rust-version = "1.85"
+publish = false
 
 [workspace.dependencies]
 crossbeam-channel = "0.5.16"
@@ -15,4 +16,3 @@ eframe = { version = "0.35.0", default-features = false, features = ["default_fo
 image = { version = "0.25.10", default-features = false, features = ["jpeg"] }
 serde = { version = "1.0.228", features = ["derive"] }
 thiserror = "2.0.18"
-

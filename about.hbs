@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RustyNTRViewer third-party licenses</title>
+  <style>
+    body { font: 16px/1.5 system-ui, sans-serif; margin: 2rem auto; max-width: 72rem; padding: 0 1rem; color: #202124; }
+    h1, h2 { line-height: 1.2; }
+    pre { background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 6px; overflow: auto; padding: 1rem; white-space: pre-wrap; }
+    .packages { margin-bottom: 0.75rem; }
+  </style>
+</head>
+<body>
+  <h1>RustyNTRViewer third-party licenses</h1>
+  <p>This document is generated from <code>Cargo.lock</code>. It contains the license texts selected for dependencies used by the supported release targets.</p>
+  {{#each licenses}}
+  <section>
+    <h2 id="{{id}}">{{name}} ({{id}})</h2>
+    <div class="packages">
+      Used by:
+      {{#each used_by}}
+        <a href="{{crate.repository}}">{{crate.name}} {{crate.version}}</a>{{#unless @last}},{{/unless}}
+      {{/each}}
+    </div>
+    <pre>{{text}}</pre>
+  </section>
+  {{/each}}
+</body>
+</html>

@@ -10,6 +10,13 @@ on:
       - "crates/**"
       - "Cargo.lock"
       - "Cargo.toml"
+      - "LICENSE"
+      - "README.md"
+      - "about.hbs"
+      - "about.toml"
+      - "deny.toml"
+      - "THIRD_PARTY_LICENSES.html"
+      - "THIRD_PARTY_NOTICES.md"
   push:
     tags: ["v*"]
   workflow_dispatch:

@@ -17,6 +17,31 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  licenses:
+    name: Dependency licenses
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+      - name: Install Rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+      - name: Install pinned license tools
+        run: |
+          cargo install cargo-about --version 0.9.1 --locked --features cli
+          cargo install cargo-deny --version 0.20.2 --locked
+      - name: Fetch locked dependencies
+        run: cargo fetch --locked
+      - name: Enforce dependency license policy
+        run: cargo deny check licenses
+      - name: Verify generated third-party licenses
+        run: |
+          .github/scripts/generate-licenses.sh THIRD_PARTY_LICENSES.generated.html
+          diff --unified THIRD_PARTY_LICENSES.html THIRD_PARTY_LICENSES.generated.html
+
   quality:
     name: Formatting and Clippy
     runs-on: ubuntu-24.04
@@ -63,13 +88,15 @@ jobs:
   required:
     name: Required
     if: always()
-    needs: [quality, test]
+    needs: [licenses, quality, test]
     runs-on: ubuntu-24.04
     steps:
       - name: Verify required jobs
         env:
           QUALITY_RESULT: ${{ needs.quality.result }}
           TEST_RESULT: ${{ needs.test.result }}
+          LICENSES_RESULT: ${{ needs.licenses.result }}
         run: |
+          test "$LICENSES_RESULT" = success
           test "$QUALITY_RESULT" = success
           test "$TEST_RESULT" = success

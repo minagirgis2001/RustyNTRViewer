@@ -5,10 +5,10 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
+publish.workspace = true
 
 [dependencies]
 crossbeam-channel.workspace = true
 serde.workspace = true
 thiserror.workspace = true
 ntr-codec = { path = "../ntr-codec" }
-
