@@ -117,7 +117,12 @@ pub enum ViewerEvent {
     StateChanged(ConnectionState),
     ActiveMode(StreamMode),
     Frame(Frame),
-    Stats { decoded: u64, dropped: u64 },
+    Stats {
+        decoded: u64,
+        dropped: u64,
+        top_fps: f32,
+        bottom_fps: f32,
+    },
     Error(String),
 }
 

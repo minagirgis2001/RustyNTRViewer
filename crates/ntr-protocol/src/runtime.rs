@@ -1,16 +1,107 @@
 use crate::classic::{ClassicAssembler, ClassicPacket, PacketOutcome};
 use crate::control::ControlHeader;
-use crate::{ConnectionState, Frame, StreamMode, ViewerCommand, ViewerConfig, ViewerEvent};
+use crate::{
+    CompletedFrame, ConnectionState, Frame, Screen, StreamMode, ViewerCommand, ViewerConfig,
+    ViewerEvent,
+};
 use crossbeam_channel::{Receiver, Sender, TryRecvError, bounded};
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpStream, UdpSocket};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 const CONTROL_PORT: u16 = 8000;
 const HEARTBEAT_INTERVAL: Duration = Duration::from_millis(250);
 const FALLBACK_INTERVAL: Duration = Duration::from_secs(3);
+const DECODE_QUEUE_CAPACITY: usize = 4;
+
+#[derive(Default)]
+struct DecodeCounters {
+    decoded: AtomicU64,
+    dropped: AtomicU64,
+    top: AtomicU64,
+    bottom: AtomicU64,
+    streaming: AtomicBool,
+}
+
+struct DecodeWorker {
+    frames: Option<Sender<CompletedFrame>>,
+    counters: Arc<DecodeCounters>,
+    thread: Option<JoinHandle<()>>,
+}
+
+impl DecodeWorker {
+    fn spawn(events: Sender<ViewerEvent>) -> Self {
+        let (frame_tx, frame_rx) = bounded::<CompletedFrame>(DECODE_QUEUE_CAPACITY);
+        let counters = Arc::new(DecodeCounters::default());
+        let worker_counters = Arc::clone(&counters);
+        let thread = thread::Builder::new()
+            .name("ntr-decoder".into())
+            .spawn(move || {
+                while let Ok(frame) = frame_rx.recv() {
+                    match ntr_codec::decode_jpeg(&frame.encoded) {
+                        Ok(image) => {
+                            worker_counters.decoded.fetch_add(1, Ordering::Relaxed);
+                            match frame.screen {
+                                Screen::Top => {
+                                    worker_counters.top.fetch_add(1, Ordering::Relaxed);
+                                }
+                                Screen::Bottom => {
+                                    worker_counters.bottom.fetch_add(1, Ordering::Relaxed);
+                                }
+                            }
+                            if !worker_counters.streaming.swap(true, Ordering::Relaxed) {
+                                let _ = events.try_send(ViewerEvent::StateChanged(
+                                    ConnectionState::Streaming,
+                                ));
+                            }
+                            let event = ViewerEvent::Frame(Frame {
+                                screen: frame.screen,
+                                sequence: frame.sequence,
+                                width: image.width,
+                                height: image.height,
+                                rgba: Arc::from(image.rgba),
+                            });
+                            if events.try_send(event).is_err() {
+                                worker_counters.dropped.fetch_add(1, Ordering::Relaxed);
+                            }
+                        }
+                        Err(error) => {
+                            worker_counters.dropped.fetch_add(1, Ordering::Relaxed);
+                            let _ = events.try_send(ViewerEvent::Error(error.to_string()));
+                        }
+                    }
+                }
+            })
+            .expect("failed to spawn decoder thread");
+        Self {
+            frames: Some(frame_tx),
+            counters,
+            thread: Some(thread),
+        }
+    }
+
+    fn submit(&self, frame: CompletedFrame) {
+        if self
+            .frames
+            .as_ref()
+            .is_none_or(|frames| frames.try_send(frame).is_err())
+        {
+            self.counters.dropped.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+}
+
+impl Drop for DecodeWorker {
+    fn drop(&mut self) {
+        self.frames.take();
+        if let Some(thread) = self.thread.take() {
+            let _ = thread.join();
+        }
+    }
+}
 
 pub struct Viewer;
 
@@ -113,14 +204,15 @@ fn run_session(
     let _ = events.send(ViewerEvent::ActiveMode(active_mode));
 
     let mut assembler = ClassicAssembler::default();
+    let decoder = DecodeWorker::spawn(events.clone());
     let mut datagram = vec![0_u8; 64 * 1024];
     let mut tcp_discard = [0_u8; 4096];
     let mut last_heartbeat = Instant::now();
     let mut mode_started = Instant::now();
     let mut last_stats = Instant::now();
-    let mut decoded = 0_u64;
-    let mut dropped = 0_u64;
-    let mut streaming = false;
+    let mut network_dropped = 0_u64;
+    let mut previous_top = 0_u64;
+    let mut previous_bottom = 0_u64;
 
     loop {
         match commands.try_recv() {
@@ -144,7 +236,7 @@ fn run_session(
             }
         }
 
-        if !streaming
+        if !decoder.counters.streaming.load(Ordering::Relaxed)
             && config.stream_mode == StreamMode::Auto
             && mode_started.elapsed() >= FALLBACK_INTERVAL
             && auto_index + 1 < auto_modes.len()
@@ -169,38 +261,14 @@ fn run_session(
                 match ClassicPacket::parse(&datagram[..len]) {
                     Ok(packet) => match assembler.push(packet) {
                         PacketOutcome::Complete(frame) if !frame.lossless => {
-                            match ntr_codec::decode_jpeg(&frame.encoded) {
-                                Ok(image) => {
-                                    decoded += 1;
-                                    if !streaming {
-                                        streaming = true;
-                                        let _ = events.send(ViewerEvent::StateChanged(
-                                            ConnectionState::Streaming,
-                                        ));
-                                    }
-                                    let event = ViewerEvent::Frame(Frame {
-                                        screen: frame.screen,
-                                        sequence: frame.sequence,
-                                        width: image.width,
-                                        height: image.height,
-                                        rgba: Arc::from(image.rgba),
-                                    });
-                                    if events.try_send(event).is_err() {
-                                        dropped += 1;
-                                    }
-                                }
-                                Err(error) => {
-                                    dropped += 1;
-                                    let _ = events.try_send(ViewerEvent::Error(error.to_string()));
-                                }
-                            }
+                            decoder.submit(frame);
                         }
                         PacketOutcome::Complete(_) | PacketOutcome::ReplacedIncomplete => {
-                            dropped += 1
+                            network_dropped += 1
                         }
                         PacketOutcome::Pending => {}
                     },
-                    Err(_) => dropped += 1,
+                    Err(_) => network_dropped += 1,
                 }
             }
             Err(e)
@@ -212,7 +280,19 @@ fn run_session(
         }
 
         if last_stats.elapsed() >= Duration::from_secs(1) {
-            let _ = events.try_send(ViewerEvent::Stats { decoded, dropped });
+            let elapsed = last_stats.elapsed().as_secs_f32();
+            let decoded = decoder.counters.decoded.load(Ordering::Relaxed);
+            let top = decoder.counters.top.load(Ordering::Relaxed);
+            let bottom = decoder.counters.bottom.load(Ordering::Relaxed);
+            let dropped = network_dropped + decoder.counters.dropped.load(Ordering::Relaxed);
+            let _ = events.try_send(ViewerEvent::Stats {
+                decoded,
+                dropped,
+                top_fps: (top - previous_top) as f32 / elapsed,
+                bottom_fps: (bottom - previous_bottom) as f32 / elapsed,
+            });
+            previous_top = top;
+            previous_bottom = bottom;
             last_stats = Instant::now();
         }
     }

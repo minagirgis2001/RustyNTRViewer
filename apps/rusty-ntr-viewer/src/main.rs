@@ -65,11 +65,20 @@ struct App {
     error: Option<String>,
     decoded: u64,
     dropped: u64,
+    top_fps: f32,
+    bottom_fps: f32,
     top: Option<egui::TextureHandle>,
     bottom: Option<egui::TextureHandle>,
 }
 
 impl App {
+    fn screen_viewport_id(screen: Screen) -> egui::ViewportId {
+        egui::ViewportId::from_hash_of(match screen {
+            Screen::Top => "top-screen-window",
+            Screen::Bottom => "bottom-screen-window",
+        })
+    }
+
     fn new(cc: &eframe::CreationContext<'_>) -> Self {
         let stored = |key: &str, fallback: &str| {
             cc.storage
@@ -93,6 +102,8 @@ impl App {
             error: None,
             decoded: 0,
             dropped: 0,
+            top_fps: 0.0,
+            bottom_fps: 0.0,
             top: None,
             bottom: None,
         };
@@ -140,9 +151,16 @@ impl App {
                 ViewerEvent::StateChanged(state) => self.state = state,
                 ViewerEvent::ActiveMode(mode) => self.active_mode = Some(mode),
                 ViewerEvent::Frame(frame) => self.update_texture(ctx, frame),
-                ViewerEvent::Stats { decoded, dropped } => {
+                ViewerEvent::Stats {
+                    decoded,
+                    dropped,
+                    top_fps,
+                    bottom_fps,
+                } => {
                     self.decoded = decoded;
                     self.dropped = dropped;
+                    self.top_fps = top_fps;
+                    self.bottom_fps = bottom_fps;
                 }
                 ViewerEvent::Error(error) => self.error = Some(error),
             }
@@ -151,11 +169,12 @@ impl App {
     }
 
     fn update_texture(&mut self, ctx: &egui::Context, frame: Frame) {
+        let screen = frame.screen;
         let image = egui::ColorImage::from_rgba_unmultiplied(
             [frame.width as usize, frame.height as usize],
             &frame.rgba,
         );
-        let target = match frame.screen {
+        let target = match screen {
             Screen::Top => &mut self.top,
             Screen::Bottom => &mut self.bottom,
         };
@@ -163,7 +182,7 @@ impl App {
             Some(texture) => texture.set(image, egui::TextureOptions::NEAREST),
             None => {
                 *target = Some(ctx.load_texture(
-                    match frame.screen {
+                    match screen {
                         Screen::Top => "top-screen",
                         Screen::Bottom => "bottom-screen",
                     },
@@ -172,13 +191,42 @@ impl App {
                 ))
             }
         }
+        if self.layout == Layout::Separate {
+            ctx.request_repaint_of(Self::screen_viewport_id(screen));
+        }
     }
 
     fn screen(ui: &mut egui::Ui, texture: Option<&egui::TextureHandle>, max: egui::Vec2) {
         if let Some(texture) = texture {
-            let size = texture.size_vec2();
+            let source_size = texture.size_vec2();
+            let size = egui::vec2(source_size.y, source_size.x);
             let scale = (max.x / size.x).min(max.y / size.y).max(0.1);
-            ui.add(egui::Image::new(texture).fit_to_exact_size(size * scale));
+            let (rect, _) = ui.allocate_exact_size(size * scale, egui::Sense::hover());
+            let mut mesh = egui::Mesh::with_texture(texture.id());
+            mesh.vertices.extend_from_slice(&[
+                egui::epaint::Vertex {
+                    pos: rect.left_top(),
+                    uv: egui::pos2(1.0, 0.0),
+                    color: egui::Color32::WHITE,
+                },
+                egui::epaint::Vertex {
+                    pos: rect.right_top(),
+                    uv: egui::pos2(1.0, 1.0),
+                    color: egui::Color32::WHITE,
+                },
+                egui::epaint::Vertex {
+                    pos: rect.left_bottom(),
+                    uv: egui::pos2(0.0, 0.0),
+                    color: egui::Color32::WHITE,
+                },
+                egui::epaint::Vertex {
+                    pos: rect.right_bottom(),
+                    uv: egui::pos2(0.0, 1.0),
+                    color: egui::Color32::WHITE,
+                },
+            ]);
+            mesh.indices.extend_from_slice(&[0, 1, 2, 2, 1, 3]);
+            ui.painter().add(mesh);
         } else {
             ui.allocate_ui_with_layout(
                 max,
@@ -234,7 +282,7 @@ impl App {
         }
         let top = self.top.clone();
         ctx.show_viewport_deferred(
-            egui::ViewportId::from_hash_of("top-screen-window"),
+            Self::screen_viewport_id(Screen::Top),
             egui::ViewportBuilder::default()
                 .with_title("RustyNTRViewer — Top")
                 .with_inner_size([800.0, 480.0]),
@@ -242,7 +290,7 @@ impl App {
         );
         let bottom = self.bottom.clone();
         ctx.show_viewport_deferred(
-            egui::ViewportId::from_hash_of("bottom-screen-window"),
+            Self::screen_viewport_id(Screen::Bottom),
             egui::ViewportBuilder::default()
                 .with_title("RustyNTRViewer — Bottom")
                 .with_inner_size([640.0, 480.0]),
@@ -300,8 +348,8 @@ impl eframe::App for App {
                     ui.weak(format!("using {}", mode.label()));
                 }
                 ui.weak(format!(
-                    "decoded {} · dropped {}",
-                    self.decoded, self.dropped
+                    "top {:.1} FPS · bottom {:.1} FPS · decoded {} · dropped {}",
+                    self.top_fps, self.bottom_fps, self.decoded, self.dropped
                 ));
             });
             egui::CollapsingHeader::new("Advanced").show(ui, |ui| {
