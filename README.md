@@ -47,4 +47,6 @@ git push origin v0.1.0
 Release artifacts include a universal macOS `.dmg`, a Windows x86_64 `.zip`
 containing the `.exe`, and Linux x86_64 `.tar.gz` and `.deb` packages. The
 release workflow can also be run manually to build artifacts without publishing
-a GitHub release.
+a GitHub release. Pull requests that affect application or packaging code build
+the same packages without publishing them, catching release-only failures before
+merge.
