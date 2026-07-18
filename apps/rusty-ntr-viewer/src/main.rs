@@ -78,7 +78,7 @@ impl App {
         };
         let mode_index = stored("mode", "0").parse::<usize>().unwrap_or(0);
         let layout_index = stored("layout", "0").parse::<usize>().unwrap_or(0);
-        Self {
+        let mut app = Self {
             viewer: Viewer::spawn(),
             console_ip: stored("console_ip", "192.168.1.24"),
             bind_ip: stored("bind_ip", "192.168.1.5"),
@@ -95,7 +95,11 @@ impl App {
             dropped: 0,
             top: None,
             bottom: None,
+        };
+        if std::env::args().any(|arg| arg == "--connect") {
+            app.connect();
         }
+        app
     }
 
     fn connect(&mut self) {

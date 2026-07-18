@@ -13,6 +13,13 @@ Rust codecs are completed.
 cargo run -p rusty-ntr-viewer --release
 ```
 
+Pass `--connect` after `--` to connect immediately using the saved/default
+addresses, which is useful for smoke tests:
+
+```sh
+cargo run -p rusty-ntr-viewer --release -- --connect
+```
+
 On the 3DS, start NTR-HR. In the app, enter the console IP, select the Mac's LAN
 address as Viewer IP, leave Viewer Port at `8001`, and click Connect.
 
@@ -23,4 +30,3 @@ address as Viewer IP, leave Viewer Port at `8001`, and click Connect.
 - JPEG quality: `75`
 - Bandwidth: `16 Mbps`
 - Top-screen priority factor: `2`
-
