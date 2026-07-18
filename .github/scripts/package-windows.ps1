@@ -12,5 +12,5 @@ $Stage = Join-Path $Dist $PackageName
 cargo build --release --locked -p rusty-ntr-viewer
 New-Item -ItemType Directory -Force -Path $Stage | Out-Null
 Copy-Item "target/release/rusty-ntr-viewer.exe" $Stage
-Copy-Item "README.md", "LICENSE", "THIRD_PARTY_NOTICES.md" $Stage
+Copy-Item "README.md", "LICENSE", "THIRD_PARTY_NOTICES.md", "THIRD_PARTY_LICENSES.html" $Stage
 Compress-Archive -Path $Stage -DestinationPath (Join-Path $Dist "$PackageName.zip") -Force

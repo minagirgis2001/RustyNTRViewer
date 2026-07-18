@@ -22,7 +22,7 @@ chmod +x "$APP/Contents/MacOS/rusty-ntr-viewer"
 codesign --force --deep --sign - "$APP"
 
 cp -R "$APP" "$DMG_ROOT/"
-cp README.md LICENSE THIRD_PARTY_NOTICES.md "$DMG_ROOT/"
+cp README.md LICENSE THIRD_PARTY_NOTICES.md THIRD_PARTY_LICENSES.html "$DMG_ROOT/"
 hdiutil create \
   -volname RustyNTRViewer \
   -srcfolder "$DMG_ROOT" \

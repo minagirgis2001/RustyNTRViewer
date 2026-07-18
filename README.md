@@ -34,8 +34,10 @@ address as Viewer IP, leave Viewer Port at `8001`, and click Connect.
 ## Continuous integration and releases
 
 Pull requests and pushes to `main` run formatting, Clippy, and workspace tests on
-Linux, macOS, and Windows. The protected `main` branch uses the aggregate
-`Required` job as its stable required-check target.
+Linux, macOS, and Windows. CI also enforces the dependency license allow-list
+and verifies that the generated third-party license bundle matches `Cargo.lock`.
+The protected `main` branch uses the aggregate `Required` job as its stable
+required-check target.
 
 Pushing a semantic-version tag builds and publishes a GitHub release:
 
@@ -50,3 +52,18 @@ release workflow can also be run manually to build artifacts without publishing
 a GitHub release. Pull requests that affect application or packaging code build
 the same packages without publishing them, catching release-only failures before
 merge.
+
+## Third-party licenses
+
+Release packages contain `THIRD_PARTY_NOTICES.md` and the complete generated
+`THIRD_PARTY_LICENSES.html` attribution bundle. After changing dependencies,
+install the pinned generator and refresh the bundle:
+
+```sh
+cargo install cargo-about --version 0.9.1 --locked --features cli
+cargo fetch --locked
+.github/scripts/generate-licenses.sh
+```
+
+The accepted license policy and supported release targets are declared in
+`about.toml` and `deny.toml`.
