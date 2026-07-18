@@ -30,3 +30,21 @@ address as Viewer IP, leave Viewer Port at `8001`, and click Connect.
 - JPEG quality: `75`
 - Bandwidth: `16 Mbps`
 - Top-screen priority factor: `2`
+
+## Continuous integration and releases
+
+Pull requests and pushes to `main` run formatting, Clippy, and workspace tests on
+Linux, macOS, and Windows. The protected `main` branch uses the aggregate
+`Required` job as its stable required-check target.
+
+Pushing a semantic-version tag builds and publishes a GitHub release:
+
+```sh
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+Release artifacts include a universal macOS `.dmg`, a Windows x86_64 `.zip`
+containing the `.exe`, and Linux x86_64 `.tar.gz` and `.deb` packages. The
+release workflow can also be run manually to build artifacts without publishing
+a GitHub release.
